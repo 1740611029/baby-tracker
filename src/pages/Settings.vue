@@ -23,7 +23,7 @@
           <div class="sl">快捷奶量<small>点 × 删除，最多 8 个</small></div>
         </div>
         <div class="chips" style="padding:8px 0 4px">
-          <span v-for="a in settings.amounts" :key="a" class="chip">{{ a }}<i class="xi" @click="removeAmount(a)">×</i></span>
+          <span v-for="a in settings.amounts" :key="a" class="chip x">{{ a }}<i class="xi" @click="removeAmount(a)">×</i></span>
         </div>
         <div class="add-row">
           <input class="ar-input" type="number" inputmode="numeric" v-model.number="newAmount" placeholder="输入新奶量，如 150" />
@@ -36,7 +36,7 @@
           <div class="sl">快捷备注词<small>如「亲喂」「瓶喂」「拍嗝」</small></div>
         </div>
         <div class="chips" style="padding:8px 0 4px">
-          <span v-for="w in settings.words" :key="w" class="chip word">{{ w }}<i class="xi" @click="removeWord(w)">×</i></span>
+          <span v-for="w in settings.words" :key="w" class="chip word x">{{ w }}<i class="xi" @click="removeWord(w)">×</i></span>
         </div>
         <div class="add-row">
           <input class="ar-input" v-model.trim="newWord" placeholder="输入新快捷词" maxlength="10" />
