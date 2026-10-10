@@ -13,12 +13,13 @@
 
       <template v-if="shown.length">
         <div v-for="t in shown" :key="t.id" class="card todo-item" :class="{ done: t.done }">
-          <button class="todo-check" @click.stop="toggle(t)"><span v-if="t.done">✓</span></button>
           <div class="tt" @click="edit(t)">
             {{ t.title }}
             <small>{{ subtitle(t) }}</small>
           </div>
           <img v-if="t.image" class="todo-thumb" :src="t.image" loading="lazy" @click.stop="preview = t.image" />
+          <button v-if="!t.done" class="btn-finish" @click.stop="toggle(t)">完成</button>
+          <span v-else class="done-mark">✓</span>
         </div>
       </template>
 
@@ -44,7 +45,6 @@
         </div>
         <button v-else class="ph" @click="pick"><span class="pi">🖼</span>添加图片</button>
       </div>
-      <div v-if="!form.image" class="paste-hint">📋 也可以直接 Ctrl+V 粘贴截图</div>
       <button class="btn-save" @click="save">保 存</button>
       <button v-if="form.id" class="btn-danger-ghost" @click="del">删除此待办</button>
     </div>

@@ -237,17 +237,17 @@ input[type="datetime-local"].time-pill { border: none; }
 .seg span.on { background: var(--green); color: #fff; font-weight: 600; }
 
 .todo-item { padding: 14px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.todo-check {
-  width: 26px; height: 26px; border-radius: 50%; border: 2px solid #C9D6D0; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px;
-}
-.todo-item.done .todo-check { background: var(--green); border-color: var(--green); }
 .todo-item .tt { flex: 1; font-size: 15px; min-width: 0; }
 .todo-item .tt small { display: block; font-size: 11px; color: var(--ink-2); margin-top: 1px; }
 .todo-item.done .tt { color: var(--ink-2); text-decoration: line-through; }
 .todo-thumb {
   width: 46px; height: 46px; border-radius: 10px; flex-shrink: 0; object-fit: cover;
 }
+.btn-finish {
+  flex-shrink: 0; padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--green-soft); color: var(--green-dark); border: 1.5px solid var(--green);
+}
+.done-mark { color: var(--green); font-size: 18px; font-weight: 700; flex-shrink: 0; }
 
 .fab {
   position: fixed; right: max(18px, calc(50% - 240px + 18px)); bottom: calc(84px + env(safe-area-inset-bottom));
