@@ -1,0 +1,8 @@
+name = "baby-tracker"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "baby-tracker-db"
+# 部署前：npx wrangler d1 create baby-tracker-db，把返回的 database_id 填到下面
+database_id = "在此填入你的 database_id"
