@@ -48,9 +48,14 @@ export async function onRequestPost({ env, request, params }) {
   const content = body.content !== undefined ? String(body.content).slice(0, 5000) : row.content
   const pinned = body.pinned !== undefined ? (body.pinned ? 1 : 0) : row.pinned
 
+  // 仅当确实修改了内容时才刷新 updated_at；只切换置顶时保留原值
+  const touchesContent =
+    body.title !== undefined || body.content !== undefined || Array.isArray(body.images)
+  const updatedAt = touchesContent ? nowISO() : row.updated_at
+
   await env.DB.prepare(
     'UPDATE memos SET title = ?, content = ?, images = ?, pinned = ?, updated_at = ? WHERE id = ?'
-  ).bind(title, content, JSON.stringify(images), pinned, nowISO(), params.id).run()
+  ).bind(title, content, JSON.stringify(images), pinned, updatedAt, params.id).run()
   return json({ ok: true })
 }
 
