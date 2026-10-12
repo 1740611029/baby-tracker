@@ -2,7 +2,7 @@ import { json, nowISO } from '../utils.js'
 
 export async function onRequestGet({ env }) {
   const { results } = await env.DB.prepare(
-    'SELECT id, title, content, images, created_at, updated_at FROM memos ORDER BY updated_at DESC LIMIT 500'
+    'SELECT id, title, content, images, pinned, created_at, updated_at FROM memos ORDER BY pinned DESC, updated_at DESC LIMIT 500'
   ).all()
   return json(results.map(m => {
     let imgs = []
@@ -11,6 +11,7 @@ export async function onRequestGet({ env }) {
       id: m.id,
       title: m.title,
       content: m.content,
+      pinned: m.pinned,
       created_at: m.created_at,
       updated_at: m.updated_at,
       img_count: imgs.length
@@ -27,7 +28,7 @@ export async function onRequestPost({ env, request }) {
     : []
   const t = nowISO()
   const r = await env.DB.prepare(
-    'INSERT INTO memos (title, content, images, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO memos (title, content, images, pinned, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)'
   ).bind(title, String(body.content || '').slice(0, 5000), JSON.stringify(images), t, t).run()
   return json({ ok: true, id: r.meta.last_row_id })
 }

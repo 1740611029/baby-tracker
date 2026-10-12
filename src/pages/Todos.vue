@@ -13,9 +13,11 @@
 
       <template v-if="shown.length">
         <div v-for="t in shown" :key="t.id" class="card todo-item" :class="{ done: t.done }">
+          <button class="pin-btn" :class="{ on: t.pinned }" @click.stop="togglePin(t)">📌</button>
           <div class="tt" @click="edit(t)">
             {{ t.title }}
             <small>{{ subtitle(t) }}</small>
+            <span v-if="t.due_time" class="due-chip">{{ dueText(t.due_time) }}</span>
           </div>
           <img v-if="t.image" class="todo-thumb" :src="t.image" loading="lazy" @click.stop="preview = t.image" />
           <button v-if="!t.done" class="btn-finish" @click.stop="toggle(t)">完成</button>
@@ -26,7 +28,7 @@
       <div v-else-if="!loadingList" class="empty">
         <div class="empty-art">✅</div>
         <div class="empty-title">{{ tab === 'doing' ? '没有进行中的待办' : '还没有已完成的待办' }}</div>
-        <div class="empty-desc">点右下角 ＋ 记下要做的事<br>还可以贴上相关截图</div>
+        <div class="empty-desc">点右下角 ＋ 记下要做的事<br>还可以设置时间、贴上截图</div>
       </div>
     </div>
 
@@ -36,7 +38,16 @@
     <div v-if="sheet" class="sheet">
       <div class="grab"></div>
       <h5>{{ form.id ? '编辑待办' : '新增待办' }} ✅</h5>
-      <input class="title-input" v-model.trim="form.title" placeholder="要做什么？" maxlength="50" />
+      <textarea
+        ref="titleEl"
+        class="title-input"
+        rows="1"
+        v-model="form.title"
+        placeholder="要做什么？（可多行，随输入自动增高）"
+        @input="autoGrow"
+      ></textarea>
+      <div class="field-label"><span>时间（可选）</span></div>
+      <input type="datetime-local" class="time-pill" v-model="form.due" />
       <div class="field-label"><span>截图 / 图片（可选）</span></div>
       <div class="img-upload">
         <div v-if="form.image" class="thumb">
@@ -56,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { api } from '../utils/api'
 import { pickImages, compressImage } from '../utils/image'
 import { showToast, showConfirm, showLoading, hideLoading } from '../utils/ui'
@@ -67,7 +78,8 @@ const loadingList = ref(true)
 const tab = ref('doing')
 const sheet = ref(false)
 const preview = ref('')
-const form = reactive({ id: null, title: '', image: '' })
+const titleEl = ref(null)
+const form = reactive({ id: null, title: '', image: '', due: '' })
 
 const doing = computed(() => list.value.filter(t => !t.done))
 const doneList = computed(() => list.value.filter(t => t.done))
@@ -81,6 +93,25 @@ function subtitle(t) {
     return `已完成 · ${c.getMonth() + 1}月${c.getDate()}日`
   }
   return created
+}
+
+function dueText(iso) {
+  const d = new Date(iso)
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function toLocalInputValue(iso) {
+  const d = new Date(iso)
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function autoGrow() {
+  const el = titleEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 240) + 'px'
 }
 
 async function load() {
@@ -103,14 +134,18 @@ function openNew() {
   form.id = null
   form.title = ''
   form.image = ''
+  form.due = ''
   sheet.value = true
+  nextTick(autoGrow)
 }
 
 function edit(t) {
   form.id = t.id
   form.title = t.title
   form.image = t.image || ''
+  form.due = t.due_time ? toLocalInputValue(t.due_time) : ''
   sheet.value = true
+  nextTick(autoGrow)
 }
 
 async function pick() {
@@ -136,14 +171,32 @@ async function toggle(t) {
   }
 }
 
+async function togglePin(t) {
+  const prev = t.pinned
+  t.pinned = prev ? 0 : 1
+  try {
+    await api.post(`/api/todo/${t.id}`, { pinned: t.pinned })
+    await load()
+  } catch (e) {
+    t.pinned = prev
+    showToast(e.message || '操作失败')
+  }
+}
+
 async function save() {
-  if (!form.title) return showToast('请输入待办内容')
+  const title = form.title.trim()
+  if (!title) return showToast('请输入待办内容')
+  const payload = {
+    title,
+    image: form.image,
+    due_time: form.due ? new Date(form.due).toISOString() : ''
+  }
   showLoading()
   try {
     if (form.id) {
-      await api.post(`/api/todo/${form.id}`, { title: form.title, image: form.image })
+      await api.post(`/api/todo/${form.id}`, payload)
     } else {
-      await api.post('/api/todos', { title: form.title, image: form.image })
+      await api.post('/api/todos', payload)
     }
     sheet.value = false
     showToast('已保存')

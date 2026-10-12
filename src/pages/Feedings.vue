@@ -18,23 +18,32 @@
         <div class="lf-badge">间隔 {{ settings.interval }} 小时</div>
       </div>
 
-      <button class="btn-record" @click="openSheet">🍼&nbsp;记一笔</button>
+      <div class="btn-row">
+        <button class="btn-record" @click="openSheet('feeding')">🍼&nbsp;记一笔</button>
+        <button class="btn-secondary" @click="openSheet('event')">📌 记事件</button>
+      </div>
 
       <template v-if="groups.length">
         <template v-for="g in groups" :key="g.key">
-          <div class="day-group">{{ g.label }} · {{ g.items.length }} 次，共 {{ g.sum }}ml</div>
-          <div v-for="f in g.items" :key="f.id" class="swipe-wrap">
+          <div class="day-group">{{ groupLabel(g) }}</div>
+          <div v-for="f in g.items" :key="f._kind + '-' + f.id" class="swipe-wrap">
             <button class="swipe-delete" @click="del(f)">删除</button>
             <div
-              class="card feed-item swipe-content"
+              class="card feed-item"
+              :class="{ event: f._kind === 'event' }"
               :style="{ transform: `translateX(${f._x || 0}px)` }"
               @touchstart.passive="onTouchStart($event, f)"
               @touchmove="onTouchMove($event, f)"
               @touchend="onTouchEnd(f)"
             >
-              <div class="ft">{{ timeOf(f.feed_time) }}<small>{{ periodOf(f.feed_time) }}</small></div>
-              <div class="ml"><b>{{ f.amount_ml }}</b><span>ml</span></div>
-              <span v-if="f.note" class="note-chip" :class="{ apricot: f.note.includes('剩') }">{{ f.note }}</span>
+              <div class="ft">{{ timeOf(f._time) }}<small>{{ periodOf(f._time) }}</small></div>
+              <div v-if="f._kind === 'feeding'" class="ml"><b>{{ f.amount_ml }}</b><span>ml</span></div>
+              <div v-else class="ev-main">{{ f.title }}</div>
+              <span
+                v-if="f.note"
+                class="note-chip"
+                :class="{ apricot: f._kind === 'event' || f.note.includes('剩') }"
+              >{{ f.note }}</span>
             </div>
           </div>
         </template>
@@ -43,13 +52,14 @@
       <div v-else-if="!loadingList" class="empty">
         <div class="empty-art">🍼</div>
         <div class="empty-title">还没有喂奶记录</div>
-        <div class="empty-desc">点下面按钮记下第一顿奶<br>之后会自动提醒下次喂奶时间</div>
-        <button class="btn-empty" @click="openSheet">记一笔</button>
+        <div class="empty-desc">点下面按钮记下第一顿奶<br>也可以记录打疫苗、逛街等事件</div>
+        <button class="btn-empty" @click="openSheet('feeding')">记一笔</button>
       </div>
     </div>
 
-    <div v-if="sheet" class="dim" @click="sheet = false"></div>
-    <div v-if="sheet" class="sheet">
+    <div v-if="sheet" class="dim" @click="sheet = ''"></div>
+
+    <div v-if="sheet === 'feeding'" class="sheet">
       <div class="grab"></div>
       <h5>记一笔 🍼</h5>
       <input type="datetime-local" class="time-pill" v-model="form.time" />
@@ -80,6 +90,17 @@
       <button class="btn-save" @click="save">保 存</button>
     </div>
 
+    <div v-if="sheet === 'event'" class="sheet">
+      <div class="grab"></div>
+      <h5>记事件 📌</h5>
+      <input type="datetime-local" class="time-pill" v-model="evForm.time" />
+      <div class="field-label"><span>事件</span></div>
+      <input class="note-input" style="margin-top:0" v-model.trim="evForm.title" placeholder="例如：打疫苗、逛街、打游戏…" maxlength="50" />
+      <div class="field-label"><span>备注（可选）</span></div>
+      <input class="note-input" v-model="evForm.note" placeholder="其他备注…" maxlength="50" />
+      <button class="btn-save" @click="saveEvent">保 存</button>
+    </div>
+
     <TabBar />
   </div>
 </template>
@@ -93,16 +114,18 @@ import { showToast, showConfirm, showLoading, hideLoading } from '../utils/ui'
 import TabBar from '../components/TabBar.vue'
 
 const router = useRouter()
+const feedings = ref([])
 const list = ref([])
 const loadingList = ref(true)
-const sheet = ref(false)
+const sheet = ref('')
 const nowTick = ref(Date.now())
 const form = reactive({ time: '', amount: 90, words: [], customNote: '' })
+const evForm = reactive({ time: '', title: '', note: '' })
 
 let timer = null
 let swipe = null
 
-const lastFeed = computed(() => list.value[0] || null)
+const lastFeed = computed(() => feedings.value[0] || null)
 const elapsedMs = computed(() => lastFeed.value ? nowTick.value - new Date(lastFeed.value.feed_time).getTime() : 0)
 const elapsedText = computed(() => {
   const ms = Math.max(0, elapsedMs.value)
@@ -116,15 +139,23 @@ const tipVisible = computed(() => lastFeed.value && elapsedMs.value >= settings.
 const groups = computed(() => {
   const map = new Map()
   for (const f of list.value) {
-    const d = new Date(f.feed_time)
+    const d = new Date(f._time)
     const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-    if (!map.has(key)) map.set(key, { key, label: dayLabel(d), items: [], sum: 0 })
+    if (!map.has(key)) map.set(key, { key, label: dayLabel(d), items: [], sum: 0, feedCount: 0, eventCount: 0 })
     const g = map.get(key)
     g.items.push(f)
-    g.sum += f.amount_ml
+    if (f._kind === 'feeding') { g.sum += f.amount_ml; g.feedCount++ }
+    else g.eventCount++
   }
   return [...map.values()]
 })
+
+function groupLabel(g) {
+  const parts = []
+  if (g.feedCount) parts.push(`喂奶 ${g.feedCount} 次共 ${g.sum}ml`)
+  if (g.eventCount) parts.push(`事件 ${g.eventCount} 个`)
+  return `${g.label} · ${parts.join(' · ')}`
+}
 
 function dayLabel(d) {
   const today = new Date()
@@ -155,7 +186,15 @@ function toLocalInputValue(d) {
 
 async function load() {
   try {
-    list.value = await api.get('/api/feedings')
+    const [fs, es] = await Promise.all([
+      api.get('/api/feedings'),
+      api.get('/api/events')
+    ])
+    feedings.value = fs
+    list.value = [
+      ...fs.map(x => ({ ...x, _kind: 'feeding', _time: x.feed_time })),
+      ...es.map(x => ({ ...x, _kind: 'event', _time: x.event_time }))
+    ].sort((a, b) => new Date(b._time) - new Date(a._time))
   } catch (e) {
     showToast('加载失败，请下拉重试')
   } finally {
@@ -180,12 +219,18 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVis)
 })
 
-function openSheet() {
-  form.time = toLocalInputValue(new Date())
-  form.amount = settings.amounts[Math.min(2, settings.amounts.length - 1)] || 90
-  form.words = []
-  form.customNote = ''
-  sheet.value = true
+function openSheet(mode) {
+  if (mode === 'feeding') {
+    form.time = toLocalInputValue(new Date())
+    form.amount = settings.amounts[Math.min(2, settings.amounts.length - 1)] || 90
+    form.words = []
+    form.customNote = ''
+  } else {
+    evForm.time = toLocalInputValue(new Date())
+    evForm.title = ''
+    evForm.note = ''
+  }
+  sheet.value = mode
 }
 
 function toggleWord(w) {
@@ -205,7 +250,7 @@ async function save() {
       amount_ml: Math.round(form.amount),
       note
     })
-    sheet.value = false
+    sheet.value = ''
     showToast('已记录 🍼')
     nowTick.value = Date.now()
     await load()
@@ -216,30 +261,55 @@ async function save() {
   }
 }
 
+async function saveEvent() {
+  if (!evForm.title.trim()) return showToast('请输入事件')
+  if (!evForm.time) return showToast('请选择时间')
+  showLoading()
+  try {
+    await api.post('/api/events', {
+      title: evForm.title.trim(),
+      event_time: new Date(evForm.time).toISOString(),
+      note: evForm.note.trim()
+    })
+    sheet.value = ''
+    showToast('已记录 📌')
+    await load()
+  } catch (e) {
+    showToast(e.message || '保存失败')
+  } finally {
+    hideLoading()
+  }
+}
+
 async function del(f) {
   f._x = 0
-  const ok = await showConfirm({ title: '删除这条喂奶记录？', content: `${timeOf(f.feed_time)} · ${f.amount_ml}ml`, confirmText: '删除', danger: true })
+  const isEvent = f._kind === 'event'
+  const ok = await showConfirm({
+    title: isEvent ? '删除这条事件？' : '删除这条喂奶记录？',
+    content: isEvent ? `${timeOf(f._time)} · ${f.title}` : `${timeOf(f._time)} · ${f.amount_ml}ml`,
+    confirmText: '删除', danger: true
+  })
   if (!ok) return
   try {
-    await api.del(`/api/feeding/${f.id}`)
-    list.value = list.value.filter(i => i.id !== f.id)
+    await api.del(isEvent ? `/api/event/${f.id}` : `/api/feeding/${f.id}`)
     showToast('已删除')
+    await load()
   } catch (e) {
     showToast(e.message || '删除失败')
   }
 }
 
 function goSettings() {
-  sheet.value = false
+  sheet.value = ''
   router.push('/settings')
 }
 
 function onTouchStart(e, f) {
   list.value.forEach(i => { if (i !== f) i._x = 0 })
-  swipe = { id: f.id, startX: e.touches[0].clientX, base: f._x || 0 }
+  swipe = { id: f.id, kind: f._kind, startX: e.touches[0].clientX, base: f._x || 0 }
 }
 function onTouchMove(e, f) {
-  if (!swipe || swipe.id !== f.id) return
+  if (!swipe || swipe.id !== f.id || swipe.kind !== f._kind) return
   const dx = e.touches[0].clientX - swipe.startX
   f._x = Math.max(-72, Math.min(0, swipe.base + dx))
 }

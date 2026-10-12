@@ -19,6 +19,7 @@ export async function onRequestGet({ env, request, params }) {
     id: row.id,
     title: row.title,
     content: row.content,
+    pinned: row.pinned,
     created_at: row.created_at,
     updated_at: row.updated_at,
     img_count: images.length
@@ -45,10 +46,11 @@ export async function onRequestPost({ env, request, params }) {
   const title = body.title !== undefined ? String(body.title).trim().slice(0, 100) : row.title
   if (!title) return json({ error: '标题不能为空' }, 400)
   const content = body.content !== undefined ? String(body.content).slice(0, 5000) : row.content
+  const pinned = body.pinned !== undefined ? (body.pinned ? 1 : 0) : row.pinned
 
   await env.DB.prepare(
-    'UPDATE memos SET title = ?, content = ?, images = ?, updated_at = ? WHERE id = ?'
-  ).bind(title, content, JSON.stringify(images), nowISO(), params.id).run()
+    'UPDATE memos SET title = ?, content = ?, images = ?, pinned = ?, updated_at = ? WHERE id = ?'
+  ).bind(title, content, JSON.stringify(images), pinned, nowISO(), params.id).run()
   return json({ ok: true })
 }
 

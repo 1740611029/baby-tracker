@@ -4,3 +4,5 @@ dist
 .xdg
 .dev.vars
 .DS_Store
+.workbuddy-ai
+.idea
