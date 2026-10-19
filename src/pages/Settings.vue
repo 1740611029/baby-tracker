@@ -46,13 +46,13 @@
 
       <div class="card set-group">
         <div class="set-row" style="border-bottom:none;padding-bottom:2px">
-          <div class="sl">事件备注词<small>记事件时的快捷词，如「打疫苗」「外出」</small></div>
+          <div class="sl">快捷事件<small>记事件时一键填入事件名，如「打疫苗」「外出」</small></div>
         </div>
         <div class="chips" style="padding:8px 0 4px">
           <span v-for="w in settings.eventWords" :key="w" class="chip word x">{{ w }}<i class="xi" @click="removeWord('eventWords', w)">×</i></span>
         </div>
         <div class="add-row">
-          <input class="ar-input" v-model.trim="newEventWord" placeholder="输入新快捷词" maxlength="10" />
+          <input class="ar-input" v-model.trim="newEventWord" placeholder="输入新事件名" maxlength="10" />
           <button class="ar-btn" @click="addWord('eventWords')">添加</button>
         </div>
       </div>
