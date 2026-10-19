@@ -8,6 +8,50 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>宝宝成长记录</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script>
+    // 弱网/切网导致脚本拉取失败时的兜底：先自动重试一次，仍失败就给出手动重试入口，
+    // 避免停在白屏或「按钮点了没反应」。
+    (function () {
+      var KEY = 'bt_boot_retry'
+      function takeOnce() {
+        try {
+          if (sessionStorage.getItem(KEY)) return false
+          sessionStorage.setItem(KEY, '1')
+          return true
+        } catch (e) { return false }
+      }
+      function showFallback() {
+        var app = document.getElementById('app')
+        if (!app || app.childElementCount) return
+        app.innerHTML = '<div style="padding:72px 24px;text-align:center;font:15px/1.7 -apple-system,BlinkMacSystemFont,\'PingFang SC\',sans-serif;color:#4A4038">'
+          + '<div style="font-size:44px">🍼</div>'
+          + '<div style="margin-top:14px;font-weight:600">页面加载失败</div>'
+          + '<div style="margin-top:6px;color:#8A8078;font-size:13px">网络似乎不太稳定</div>'
+          + '<button onclick="location.reload()" style="margin-top:22px;padding:13px 30px;border:0;border-radius:999px;background:#7BAF9B;color:#fff;font-size:15px;font-weight:600;letter-spacing:2px">重新加载</button>'
+          + '</div>'
+      }
+      function recover() {
+        if (takeOnce()) location.reload()
+        else showFallback()
+      }
+      // Vite 动态导入/预加载失败
+      window.addEventListener('vite:preloadError', function (e) {
+        if (e && e.preventDefault) e.preventDefault()
+        recover()
+      })
+      // 入口脚本加载失败或执行出错：页面会一直空着，这里兜住
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var app = document.getElementById('app')
+          if (app && !app.childElementCount) recover()
+        }, 6000)
+      })
+      // 应用挂载成功，清掉重试标记
+      window.addEventListener('bt:ready', function () {
+        try { sessionStorage.removeItem(KEY) } catch (e) {}
+      })
+    })()
+  </script>
 </head>
 <body>
   <div id="app"></div>

@@ -87,6 +87,14 @@ img { display: block; }
 }
 .tip-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--apricot); flex-shrink: 0; }
 .tip-banner b { font-weight: 700; }
+.tip-banner.err { background: #FBEDE9; color: var(--danger); }
+.tip-banner.err .dot { background: var(--danger); }
+.retry-btn {
+  margin-left: auto; flex-shrink: 0;
+  padding: 4px 14px; border-radius: 999px;
+  background: var(--danger); color: #fff;
+  font-size: 12px; font-weight: 600;
+}
 
 .last-feed { padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; }
 .lf-label { font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }

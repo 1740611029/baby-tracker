@@ -6,6 +6,11 @@
     </header>
 
     <div class="body">
+      <div v-if="loadError" class="tip-banner err">
+        <span class="dot"></span>网络不稳定，数据没加载出来
+        <button class="retry-btn" @click="load">重试</button>
+      </div>
+
       <div v-if="tipVisible" class="tip-banner">
         <span class="dot"></span>宝宝该吃奶啦，距上次已&nbsp;<b>{{ elapsedText }}</b>
       </div>
@@ -49,7 +54,7 @@
         </template>
       </template>
 
-      <div v-else-if="!loadingList" class="empty">
+      <div v-else-if="!loadingList && !loadError" class="empty">
         <div class="empty-art">🍼</div>
         <div class="empty-title">还没有喂奶记录</div>
         <div class="empty-desc">点下面按钮记下第一顿奶<br>也可以记录打疫苗、逛街等事件</div>
@@ -127,6 +132,7 @@ const router = useRouter()
 const feedings = ref([])
 const list = ref([])
 const loadingList = ref(true)
+const loadError = ref(false)
 const sheet = ref('')
 const nowTick = ref(Date.now())
 const form = reactive({ time: '', amount: 90, words: [], customNote: '' })
@@ -205,8 +211,10 @@ async function load() {
       ...fs.map(x => ({ ...x, _kind: 'feeding', _time: x.feed_time })),
       ...es.map(x => ({ ...x, _kind: 'event', _time: x.event_time }))
     ].sort((a, b) => new Date(b._time) - new Date(a._time))
+    loadError.value = false
   } catch (e) {
-    showToast('加载失败，请下拉重试')
+    // 弱网/切网时接口可能整体失败，保留已有列表，顶部给一个可点的重试入口
+    loadError.value = true
   } finally {
     loadingList.value = false
   }

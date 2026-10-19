@@ -56,4 +56,7 @@ npm run dev
 - 列表/详情接口不返回图片本体，返回 `/api/xxx/image/:id` 地址按需加载
 - 图片接口带 ETag，未修改返回 304
 - 编辑时取原图用 `?raw=1`；保存时 `/api/` 开头的 image 视为未修改，保持原图
-- 前端请求 30 秒超时，GET 失败自动重试 1 次
+- 前端请求 30 秒超时；GET / DELETE（幂等）网络失败会自动等网络恢复后重试 1 次，POST 不重试（避免重复写入）
+- 页面路由一律**静态导入**，不做代码分包：整站 JS 约 120KB，分包只会让每次切页多一次网络往返，弱网下正是它失败（`Failed to fetch dynamically imported module`）
+- `public/_headers` 让 `index.html` 走 `no-cache`、`/assets/*` 长缓存，避免发版后旧 HTML 指向已删除的分包
+- `index.html` 内置启动兜底：脚本加载失败自动刷新一次，仍失败则显示「重新加载」按钮，不停在白屏
