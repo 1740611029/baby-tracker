@@ -15,7 +15,7 @@
         <div v-for="t in shown" :key="t.id" class="card todo-item" :class="{ done: t.done }">
           <button class="pin-btn" :class="{ on: t.pinned }" @click.stop="togglePin(t)">📌</button>
           <div class="tt" @click="edit(t)">
-            {{ t.title }}
+            <span class="tt-title">{{ t.title }}</span>
             <small>{{ subtitle(t) }}</small>
             <span v-if="t.due_time" class="due-chip">{{ dueText(t.due_time) }}</span>
           </div>

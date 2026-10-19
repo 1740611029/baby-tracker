@@ -33,14 +33,27 @@
 
       <div class="card set-group">
         <div class="set-row" style="border-bottom:none;padding-bottom:2px">
-          <div class="sl">快捷备注词<small>如「亲喂」「瓶喂」「拍嗝」</small></div>
+          <div class="sl">喂奶备注词<small>记一笔时的快捷词，如「亲喂」「拍嗝」</small></div>
         </div>
         <div class="chips" style="padding:8px 0 4px">
-          <span v-for="w in settings.words" :key="w" class="chip word x">{{ w }}<i class="xi" @click="removeWord(w)">×</i></span>
+          <span v-for="w in settings.words" :key="w" class="chip word x">{{ w }}<i class="xi" @click="removeWord('words', w)">×</i></span>
         </div>
         <div class="add-row">
           <input class="ar-input" v-model.trim="newWord" placeholder="输入新快捷词" maxlength="10" />
-          <button class="ar-btn" @click="addWord">添加</button>
+          <button class="ar-btn" @click="addWord('words')">添加</button>
+        </div>
+      </div>
+
+      <div class="card set-group">
+        <div class="set-row" style="border-bottom:none;padding-bottom:2px">
+          <div class="sl">事件备注词<small>记事件时的快捷词，如「打疫苗」「外出」</small></div>
+        </div>
+        <div class="chips" style="padding:8px 0 4px">
+          <span v-for="w in settings.eventWords" :key="w" class="chip word x">{{ w }}<i class="xi" @click="removeWord('eventWords', w)">×</i></span>
+        </div>
+        <div class="add-row">
+          <input class="ar-input" v-model.trim="newEventWord" placeholder="输入新快捷词" maxlength="10" />
+          <button class="ar-btn" @click="addWord('eventWords')">添加</button>
         </div>
       </div>
 
@@ -61,6 +74,7 @@ import TabBar from '../components/TabBar.vue'
 
 const newAmount = ref(null)
 const newWord = ref('')
+const newEventWord = ref('')
 
 function step(d) {
   const v = Math.round((settings.interval + d) * 10) / 10
@@ -85,18 +99,20 @@ function removeAmount(a) {
   saveSettings()
 }
 
-function addWord() {
-  const v = newWord.value.trim()
+function addWord(key) {
+  const src = key === 'eventWords' ? newEventWord : newWord
+  const list = settings[key]
+  const v = src.value.trim()
   if (!v) return showToast('请输入快捷词')
-  if (settings.words.includes(v)) return showToast('已存在')
-  if (settings.words.length >= 8) return showToast('最多 8 个快捷词')
-  settings.words.push(v)
-  newWord.value = ''
+  if (list.includes(v)) return showToast('已存在')
+  if (list.length >= 8) return showToast('最多 8 个快捷词')
+  list.push(v)
+  src.value = ''
   saveSettings()
   showToast('已添加')
 }
-function removeWord(w) {
-  settings.words = settings.words.filter(i => i !== w)
+function removeWord(key, w) {
+  settings[key] = settings[key].filter(i => i !== w)
   saveSettings()
 }
 </script>

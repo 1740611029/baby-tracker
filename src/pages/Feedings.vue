@@ -96,7 +96,17 @@
       <input type="datetime-local" class="time-pill" v-model="evForm.time" />
       <div class="field-label"><span>事件</span></div>
       <input class="note-input" style="margin-top:0" v-model.trim="evForm.title" placeholder="例如：打疫苗、逛街、打游戏…" maxlength="50" />
-      <div class="field-label"><span>备注（可选）</span></div>
+      <div class="field-label">
+        <span>备注（可选）</span>
+        <button class="quick-set" @click="goSettings">快捷值可在设置中改 ›</button>
+      </div>
+      <div v-if="settings.eventWords.length" class="chips">
+        <button
+          v-for="w in settings.eventWords" :key="w"
+          class="chip word" :class="{ on: evForm.words.includes(w) }"
+          @click="toggleEvWord(w)"
+        >{{ w }}</button>
+      </div>
       <input class="note-input" v-model="evForm.note" placeholder="其他备注…" maxlength="50" />
       <button class="btn-save" @click="saveEvent">保 存</button>
     </div>
@@ -120,7 +130,7 @@ const loadingList = ref(true)
 const sheet = ref('')
 const nowTick = ref(Date.now())
 const form = reactive({ time: '', amount: 90, words: [], customNote: '' })
-const evForm = reactive({ time: '', title: '', note: '' })
+const evForm = reactive({ time: '', title: '', note: '', words: [] })
 
 let timer = null
 let swipe = null
@@ -229,6 +239,7 @@ function openSheet(mode) {
     evForm.time = toLocalInputValue(new Date())
     evForm.title = ''
     evForm.note = ''
+    evForm.words = []
   }
   sheet.value = mode
 }
@@ -237,6 +248,12 @@ function toggleWord(w) {
   const i = form.words.indexOf(w)
   if (i >= 0) form.words.splice(i, 1)
   else form.words.push(w)
+}
+
+function toggleEvWord(w) {
+  const i = evForm.words.indexOf(w)
+  if (i >= 0) evForm.words.splice(i, 1)
+  else evForm.words.push(w)
 }
 
 async function save() {
@@ -269,7 +286,7 @@ async function saveEvent() {
     await api.post('/api/events', {
       title: evForm.title.trim(),
       event_time: new Date(evForm.time).toISOString(),
-      note: evForm.note.trim()
+      note: [...evForm.words, evForm.note.trim()].filter(Boolean).join(' ')
     })
     sheet.value = ''
     showToast('已记录 📌')
