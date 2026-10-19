@@ -98,14 +98,14 @@
         <span>事件</span>
         <button class="quick-set" @click="goSettings">快捷事件可在设置中改 ›</button>
       </div>
-      <input class="note-input" style="margin-top:0" v-model.trim="evForm.title" placeholder="例如：打疫苗、逛街、打游戏…" maxlength="50" />
-      <div v-if="settings.eventWords.length" class="chips">
+      <div v-if="settings.eventWords.length" class="chips" style="margin:6px 0 14px">
         <button
           v-for="w in settings.eventWords" :key="w"
           class="chip word" :class="{ on: evForm.title === w }"
           @click="toggleEvWord(w)"
         >{{ w }}</button>
       </div>
+      <input class="note-input" style="margin-top:0" v-model.trim="evForm.title" placeholder="例如：打疫苗、逛街、打游戏…" maxlength="50" />
       <div class="field-label"><span>备注（可选）</span></div>
       <input class="note-input" v-model="evForm.note" placeholder="其他备注…" maxlength="50" />
       <button class="btn-save" @click="saveEvent">保 存</button>
