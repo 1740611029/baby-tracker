@@ -13,6 +13,9 @@ npm install
 
 # 初始化本地 D1
 npx wrangler d1 execute baby-tracker-db --local --file=./schema.sql
+
+# 已有库增量迁移（新库执行过 schema.sql 就不用再跑）
+npx wrangler d1 execute baby-tracker-db --local --file=./migrations/003_add_settings.sql
 ```
 
 前后端联调（两个终端）：
@@ -49,10 +52,27 @@ npm run dev
 
 5. 之后每次 push 到 main 分支自动构建部署。
 
+> **已有库升级**：Pages 一次部署会同时上线前端和 Functions，所以表结构变更必须**先跑远端迁移再 push**，否则接口会 500（前端会退化成离线状态，继续用本地缓存）。
+>
+> ```bash
+> npx wrangler d1 execute baby-tracker-db --remote --file=./migrations/003_add_settings.sql
+> ```
+
+## 设置同步
+
+设置（喂奶间隔 / 展示时长 / 快捷奶量 / 快捷备注词 / 快捷事件）存 D1 的 `settings` 表，全局单租户，只有 `id=1` 这一行，内容整体存成 JSON。
+
+- `GET /api/settings`：返回 `{ ok, empty, settings, updatedAt }`。`empty=true` 表示云端还没有设置
+- `POST /api/settings`：全量覆盖写入，服务端会重新归一化（间隔 1~12 步进 0.5、窗口 1~72、奶量 1~999 最多 8 个、快捷词 ≤10 字最多 8 个），返回归一化后的结果
+- 前端 `src/utils/settings.js` 里 `settings` 仍是同步的 reactive 单例，`localStorage` 只做首屏缓存与离线兜底
+- 改设置是**乐观更新**：点一下立刻变，120ms 内的连续操作合并成一次提交，失败则回滚到上一次服务端确认值并提示
+- **首次升级**：云端为空时，前端会把本机现有配置上传一次，不会用默认值覆盖用户自己加过的快捷词。所以迁移**不预置默认行**
+
 ## 喂奶数据保留策略
 
 - 首页只展示「近 N 小时（默认 12，设置页可调 1~72）∪ 最近 6 条」的喂奶记录，由 `GET /api/feedings?hours=N` 直接裁好
-- 每次打开时，前端调用 `POST /api/cleanup` 删除超出窗口的喂奶记录；`keep=6` 硬编码在服务端，最坏也只删到剩最近 6 条
+- 每次打开时，前端调用 `POST /api/cleanup` 删除超出窗口的喂奶记录；窗口由**服务端从 `settings` 表读取**（不再接受前端传参），`keep=6` 也硬编码在服务端，最坏也只删到剩最近 6 条
+- `settings` 表还没有数据时，cleanup 直接跳过删除，不会用默认 12 小时误删用户本意更长的记录
 - 删完只有**停在喂奶列表页**（且弹层没打开）才重拉列表；其他页面只删不刷，切回喂奶页时由进入页面时的请求自然覆盖
 - **只清理 `feedings`，`events` 永不删除**（事件只按窗口过滤展示）
 - 删除不可逆、无回收站。上线前建议备份：`npx wrangler d1 export baby-tracker-db --remote --output=backup.sql`

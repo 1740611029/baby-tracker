@@ -7,6 +7,11 @@
     </header>
 
     <div class="body">
+      <div v-if="settingsMeta.offline" class="tip-banner err" style="margin-bottom:10px">
+        <span class="dot"></span>没连上服务器，现在看到的是上次同步的设置
+        <button class="retry-btn" @click="retrySync">重试</button>
+      </div>
+
       <div class="card set-group">
         <div class="set-row">
           <div class="sl">喂奶间隔<small>超过间隔后，打开首页会提示</small></div>
@@ -72,7 +77,10 @@
       </div>
 
       <div style="font-size:11px;color:var(--ink-3);text-align:center;padding:8px 0">
-        设置保存在本机浏览器，即时生效
+        <template v-if="settingsMeta.syncing">正在读取云端设置…</template>
+        <template v-else-if="settingsMeta.offline">离线修改不会保存，联网后请重试</template>
+        <template v-else-if="settingsMeta.saving || settingsMeta.pending">正在保存到云端…</template>
+        <template v-else>设置已同步到云端，换设备自动一致</template>
       </div>
     </div>
 
@@ -81,8 +89,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { settings, saveSettings } from '../utils/settings'
+import { ref, onMounted } from 'vue'
+import { settings, settingsMeta, loadSettingsFromServer, mutate } from '../utils/settings'
 import { showToast } from '../utils/ui'
 import TabBar from '../components/TabBar.vue'
 
@@ -90,48 +98,81 @@ const newAmount = ref(null)
 const newWord = ref('')
 const newEventWord = ref('')
 
-function step(d) {
-  const v = Math.round((settings.interval + d) * 10) / 10
-  settings.interval = Math.min(12, Math.max(1, v))
-  saveSettings()
+// 每次进设置页都拉一次，保证另一台设备改过的快捷词在这里生效
+onMounted(() => {
+  loadSettingsFromServer()
+})
+
+function retrySync() {
+  loadSettingsFromServer()
 }
 
-function stepWindow(d) {
-  settings.feedWindowHours = Math.min(72, Math.max(1, settings.feedWindowHours + d))
-  saveSettings()
+// 统一的失败提示：reason 是本地校验（不发请求），error 是网络/服务端失败
+function fail(r) {
+  if (r.reason) return showToast(r.reason)
+  if (!r.ok) showToast(r.error || '同步失败，请重试')
 }
 
-function addAmount() {
+async function step(d) {
+  const r = await mutate(s => {
+    const v = Math.min(12, Math.max(1, Math.round((s.interval + d) * 2) / 2))
+    if (v === s.interval) return 'unchanged'
+    s.interval = v
+  })
+  if (r.reason === 'unchanged') return
+  fail(r)
+}
+
+async function stepWindow(d) {
+  const r = await mutate(s => {
+    const v = Math.min(72, Math.max(1, s.feedWindowHours + d))
+    if (v === s.feedWindowHours) return 'unchanged'
+    s.feedWindowHours = v
+  })
+  if (r.reason === 'unchanged') return
+  fail(r)
+}
+
+async function addAmount() {
   const v = Math.round(newAmount.value)
   if (!v || v < 1 || v > 999) return showToast('请输入有效奶量')
-  if (settings.amounts.includes(v)) return showToast('已存在')
-  if (settings.amounts.length >= 8) return showToast('最多 8 个快捷值')
-  settings.amounts.push(v)
-  settings.amounts.sort((a, b) => a - b)
+  const r = await mutate(s => {
+    if (s.amounts.includes(v)) return '已存在'
+    if (s.amounts.length >= 8) return '最多 8 个快捷值'
+    s.amounts.push(v)
+    s.amounts.sort((a, b) => a - b)
+  })
+  if (r.reason || !r.ok) return fail(r)
   newAmount.value = null
-  saveSettings()
   showToast('已添加')
-}
-function removeAmount(a) {
-  if (settings.amounts.length <= 1) return showToast('至少保留一个')
-  settings.amounts = settings.amounts.filter(i => i !== a)
-  saveSettings()
 }
 
-function addWord(key) {
+async function removeAmount(a) {
+  const r = await mutate(s => {
+    if (s.amounts.length <= 1) return '至少保留一个'
+    s.amounts = s.amounts.filter(i => i !== a)
+  })
+  fail(r)
+}
+
+async function addWord(key) {
   const src = key === 'eventWords' ? newEventWord : newWord
-  const list = settings[key]
   const v = src.value.trim()
   if (!v) return showToast('请输入快捷词')
-  if (list.includes(v)) return showToast('已存在')
-  if (list.length >= 8) return showToast('最多 8 个快捷词')
-  list.push(v)
+  const r = await mutate(s => {
+    if (s[key].includes(v)) return '已存在'
+    if (s[key].length >= 8) return '最多 8 个快捷词'
+    s[key].push(v)
+  })
+  if (r.reason || !r.ok) return fail(r)
   src.value = ''
-  saveSettings()
   showToast('已添加')
 }
-function removeWord(key, w) {
-  settings[key] = settings[key].filter(i => i !== w)
-  saveSettings()
+
+async function removeWord(key, w) {
+  const r = await mutate(s => {
+    s[key] = s[key].filter(i => i !== w)
+  })
+  fail(r)
 }
 </script>

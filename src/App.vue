@@ -23,15 +23,25 @@
 import { onMounted, onUnmounted } from 'vue'
 import { ui, resolveConfirm } from './utils/ui'
 import { cleanupExpiredFeedings } from './utils/cleanup'
+import { loadSettingsFromServer } from './utils/settings'
 
 // 每次打开（冷启动 / 从后台回到前台）都清理一次过期喂奶记录。
-// 服务端幂等，没有过期数据时只返回 deleted=0，成本可忽略。
+// 窗口由服务端从 settings 表读，前端不必等设置同步；服务端幂等，没有过期数据时只返回 deleted=0。
+// 顺便同步一次设置，让另一台设备改过的快捷词也能在这里生效。
 function onVis() {
-  if (!document.hidden) cleanupExpiredFeedings()
+  if (document.hidden) return
+  cleanupExpiredFeedings()
+  loadSettingsFromServer()
 }
 
-onMounted(() => {
+onMounted(async () => {
   cleanupExpiredFeedings()
+
+  // 首次升级时服务端还没有设置，这一步会把本机现有配置上传；
+  // 上传成功后窗口才可用，补一次清理（之前那次会被服务端跳过）。
+  const r = await loadSettingsFromServer()
+  if (r && r.uploaded) cleanupExpiredFeedings(true)
+
   document.addEventListener('visibilitychange', onVis)
 })
 onUnmounted(() => document.removeEventListener('visibilitychange', onVis))

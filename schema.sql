@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TEXT NOT NULL
 );
 
+-- 设置：全局单租户，永远只有 id=1 这一行，内容整体存成 JSON。
+-- 建表但保持为空，前端首次拉到 empty 时会把本地设置上传上来。
+CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_feedings_time ON feedings(feed_time DESC);
 CREATE INDEX IF NOT EXISTS idx_todos_pinned ON todos(pinned DESC, done ASC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memos_pinned ON memos(pinned DESC, updated_at DESC);

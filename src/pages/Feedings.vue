@@ -147,6 +147,7 @@ let timer = null
 let swipe = null
 let loadStartedAt = 0      // 本次 load 的发起时刻，用于和清理请求比先后
 let pendingRefresh = false // 弹层开着时收到的刷新请求，等关掉再执行
+let loadSeq = 0            // 请求序号：设置同步后可能触发重查，旧响应不能覆盖新响应
 let disposed = false
 
 // 事件标题里出现这些词，就算作一次喂奶（事件没有类型字段，只能按标题认）
@@ -232,6 +233,7 @@ function toLocalInputValue(d) {
 }
 
 async function load() {
+  const seq = ++loadSeq
   loadStartedAt = Date.now()
   try {
     const hours = settings.feedWindowHours
@@ -239,6 +241,7 @@ async function load() {
       api.get(`/api/feedings?hours=${hours}`),
       api.get('/api/events')
     ])
+    if (seq !== loadSeq) return // 已有更新的请求在跑，丢掉这次的旧数据
     feedings.value = fs
     windowCutoff.value = Date.now() - hours * 3600e3
 
@@ -260,9 +263,9 @@ async function load() {
     loadError.value = false
   } catch (e) {
     // 弱网/切网时接口可能整体失败，保留已有列表，顶部给一个可点的重试入口
-    loadError.value = true
+    if (seq === loadSeq) loadError.value = true
   } finally {
-    loadingList.value = false
+    if (seq === loadSeq) loadingList.value = false
   }
 }
 
@@ -297,6 +300,11 @@ watch(() => cleanupState.tick, () => {
 watch(sheet, v => {
   if (v || !pendingRefresh) return
   pendingRefresh = false
+  if (!disposed) load()
+})
+
+// 设置是从服务端拉的，可能晚于首屏查询：窗口变了就按新窗口重查一次
+watch(() => settings.feedWindowHours, () => {
   if (!disposed) load()
 })
 
