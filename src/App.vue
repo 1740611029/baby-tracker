@@ -20,5 +20,19 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 import { ui, resolveConfirm } from './utils/ui'
+import { cleanupExpiredFeedings } from './utils/cleanup'
+
+// 每次打开（冷启动 / 从后台回到前台）都清理一次过期喂奶记录。
+// 服务端幂等，没有过期数据时只返回 deleted=0，成本可忽略。
+function onVis() {
+  if (!document.hidden) cleanupExpiredFeedings()
+}
+
+onMounted(() => {
+  cleanupExpiredFeedings()
+  document.addEventListener('visibilitychange', onVis)
+})
+onUnmounted(() => document.removeEventListener('visibilitychange', onVis))
 </script>

@@ -19,6 +19,20 @@
       </div>
 
       <div class="card set-group">
+        <div class="set-row">
+          <div class="sl">展示时长<small>首页只显示这段时间内的记录</small></div>
+          <div class="stepper">
+            <button class="st-btn" @click="stepWindow(-1)">−</button>
+            <div class="st-val">{{ settings.feedWindowHours }}<small> 小时</small></div>
+            <button class="st-btn" @click="stepWindow(1)">＋</button>
+          </div>
+        </div>
+        <div class="set-note">
+          每次打开时，超出这段时长的喂奶记录会被永久删除（始终至少保留最近 6 条）。调小请谨慎。
+        </div>
+      </div>
+
+      <div class="card set-group">
         <div class="set-row" style="border-bottom:none;padding-bottom:2px">
           <div class="sl">快捷奶量<small>点 × 删除，最多 8 个</small></div>
         </div>
@@ -79,6 +93,11 @@ const newEventWord = ref('')
 function step(d) {
   const v = Math.round((settings.interval + d) * 10) / 10
   settings.interval = Math.min(12, Math.max(1, v))
+  saveSettings()
+}
+
+function stepWindow(d) {
+  settings.feedWindowHours = Math.min(72, Math.max(1, settings.feedWindowHours + d))
   saveSettings()
 }
 

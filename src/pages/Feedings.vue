@@ -15,9 +15,11 @@
         <span class="dot"></span>宝宝该吃奶啦，距上次已&nbsp;<b>{{ elapsedText }}</b>
       </div>
 
-      <div v-if="lastFeed" class="card last-feed">
+      <div v-if="hasLastFeed" class="card last-feed">
         <div>
-          <div class="lf-label">距上次喂奶</div>
+          <div class="lf-label">
+            距上次喂奶<span v-if="lastFeedSource" class="lf-src"> · {{ lastFeedSource }}</span>
+          </div>
           <div class="lf-time">{{ elapsedText }}</div>
         </div>
         <div class="lf-badge">间隔 {{ settings.interval }} 小时</div>
@@ -56,8 +58,8 @@
 
       <div v-else-if="!loadingList && !loadError" class="empty">
         <div class="empty-art">🍼</div>
-        <div class="empty-title">还没有喂奶记录</div>
-        <div class="empty-desc">点下面按钮记下第一顿奶<br>也可以记录打疫苗、逛街等事件</div>
+        <div class="empty-title">近 {{ settings.feedWindowHours }} 小时没有记录</div>
+        <div class="empty-desc">点下面按钮记下这一顿奶<br>也可以记录打疫苗、逛街等事件</div>
         <button class="btn-empty" @click="openSheet('feeding')">记一笔</button>
       </div>
     </div>
@@ -121,28 +123,57 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../utils/api'
 import { settings } from '../utils/settings'
+import { cleanupState } from '../utils/cleanup'
 import { showToast, showConfirm, showLoading, hideLoading } from '../utils/ui'
 import TabBar from '../components/TabBar.vue'
 
 const router = useRouter()
-const feedings = ref([])
+const feedings = ref([])      // 服务端已按「窗口内 ∪ 最近 6 条」裁好，前端不再二次过滤
 const list = ref([])
 const loadingList = ref(true)
 const loadError = ref(false)
 const sheet = ref('')
 const nowTick = ref(Date.now())
+const windowCutoff = ref(0)   // 本次 load 时的窗口下界（ms），用于过滤事件
+const latestBreast = ref(null) // 最近一次「母乳类」事件 { time, title }
 const form = reactive({ time: '', amount: 90, words: [], customNote: '' })
 const evForm = reactive({ time: '', title: '', note: '' })
 
 let timer = null
 let swipe = null
+let loadStartedAt = 0      // 本次 load 的发起时刻，用于和清理请求比先后
+let pendingRefresh = false // 弹层开着时收到的刷新请求，等关掉再执行
+let disposed = false
 
-const lastFeed = computed(() => feedings.value[0] || null)
-const elapsedMs = computed(() => lastFeed.value ? nowTick.value - new Date(lastFeed.value.feed_time).getTime() : 0)
+// 事件标题里出现这些词，就算作一次喂奶（事件没有类型字段，只能按标题认）
+const BREAST_WORDS = ['母乳', '亲喂', '瓶喂']
+
+function isBreastTitle(title) {
+  const s = String(title || '').trim()
+  return s ? BREAST_WORDS.some(w => s.includes(w)) : false
+}
+
+function msOf(iso) {
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+// 「距上次喂奶」取「最近一条喂奶记录」和「最近一次母乳类事件」里更晚的那个
+const lastFeedAt = computed(() => {
+  const f = feedings.value[0]
+  return Math.max(f ? msOf(f.feed_time) : 0, latestBreast.value?.time || 0)
+})
+const hasLastFeed = computed(() => lastFeedAt.value > 0)
+const lastFeedSource = computed(() => {
+  const f = feedings.value[0]
+  const ft = f ? msOf(f.feed_time) : 0
+  return (latestBreast.value?.time || 0) > ft ? latestBreast.value.title : ''
+})
+const elapsedMs = computed(() => hasLastFeed.value ? nowTick.value - lastFeedAt.value : 0)
 const elapsedText = computed(() => {
   const ms = Math.max(0, elapsedMs.value)
   const h = Math.floor(ms / 36e5)
@@ -150,7 +181,7 @@ const elapsedText = computed(() => {
   if (h >= 24) return `${Math.floor(h / 24)}天${h % 24}小时`
   return `${h}小时${m}分`
 })
-const tipVisible = computed(() => lastFeed.value && elapsedMs.value >= settings.interval * 36e5)
+const tipVisible = computed(() => hasLastFeed.value && elapsedMs.value >= settings.interval * 36e5)
 
 const groups = computed(() => {
   const map = new Map()
@@ -201,16 +232,31 @@ function toLocalInputValue(d) {
 }
 
 async function load() {
+  loadStartedAt = Date.now()
   try {
+    const hours = settings.feedWindowHours
     const [fs, es] = await Promise.all([
-      api.get('/api/feedings'),
+      api.get(`/api/feedings?hours=${hours}`),
       api.get('/api/events')
     ])
     feedings.value = fs
+    windowCutoff.value = Date.now() - hours * 3600e3
+
+    // 母乳类事件要参与计时，所以用全量事件算；展示时再按窗口过滤
+    let lb = null
+    for (const e of es) {
+      if (!isBreastTitle(e.title)) continue
+      const t = msOf(e.event_time)
+      if (!t) continue
+      if (!lb || t > lb.time) lb = { time: t, title: String(e.title).trim() }
+    }
+    latestBreast.value = lb
+
+    const visibleEvents = es.filter(e => msOf(e.event_time) >= windowCutoff.value)
     list.value = [
       ...fs.map(x => ({ ...x, _kind: 'feeding', _time: x.feed_time })),
-      ...es.map(x => ({ ...x, _kind: 'event', _time: x.event_time }))
-    ].sort((a, b) => new Date(b._time) - new Date(a._time))
+      ...visibleEvents.map(x => ({ ...x, _kind: 'event', _time: x.event_time }))
+    ].sort((a, b) => msOf(b._time) - msOf(a._time))
     loadError.value = false
   } catch (e) {
     // 弱网/切网时接口可能整体失败，保留已有列表，顶部给一个可点的重试入口
@@ -233,8 +279,25 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVis)
 })
 onUnmounted(() => {
+  disposed = true
   clearInterval(timer)
   document.removeEventListener('visibilitychange', onVis)
+})
+
+// 清理真的删了数据后，只有停在喂奶列表页才重拉列表。
+// 待办/备忘/设置页时本组件未挂载，watcher 不存在 —— 天然「只删不刷」。
+watch(() => cleanupState.tick, () => {
+  // 进入页面时的请求本来就晚于本次清理发起，列表已是删除后的数据，不用再刷
+  if (loadStartedAt >= cleanupState.startedAt) return
+  if (sheet.value) { pendingRefresh = true; return } // 弹层开着：先记账，别抽换底层数据
+  load()
+})
+
+// 关掉弹层后补上那次刷新
+watch(sheet, v => {
+  if (v || !pendingRefresh) return
+  pendingRefresh = false
+  if (!disposed) load()
 })
 
 function openSheet(mode) {
@@ -295,6 +358,7 @@ async function saveEvent() {
     })
     sheet.value = ''
     showToast('已记录 📌')
+    nowTick.value = Date.now()
     await load()
   } catch (e) {
     showToast(e.message || '保存失败')
