@@ -20,6 +20,28 @@ export function clampHours(v) {
   return Math.min(72, Math.max(1, Math.round(n)))
 }
 
+// 图片体积护栏：D1 单行/单字符串上限 2MB，这里留出 JSON 结构与其它字段的余量。
+// 前端压缩后单张约 80~160KB，正常使用远低于上限；护栏只拦异常大的图。
+export const IMAGE_LIMITS = {
+  MAX_COUNT: 9,
+  MAX_ONE: 400 * 1024,      // 单张 base64 字符数上限
+  MAX_TOTAL: 1_700_000      // 整个 images 合计字符数上限
+}
+
+// 返回空串表示通过，否则返回给用户看的中文提示
+export function tooLargeImages(images) {
+  for (let i = 0; i < images.length; i++) {
+    if (images[i].length > IMAGE_LIMITS.MAX_ONE) {
+      return `第 ${i + 1} 张图片太大，请换一张或压缩后重试`
+    }
+  }
+  const total = images.reduce((n, s) => n + s.length, 0)
+  if (total > IMAGE_LIMITS.MAX_TOTAL) {
+    return `图片合计 ${Math.round(total / 1024)}KB，超过上限 ${Math.round(IMAGE_LIMITS.MAX_TOTAL / 1024)}KB，请删掉几张再保存`
+  }
+  return ''
+}
+
 export function etagOf(s) {
   let h = 5381
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0

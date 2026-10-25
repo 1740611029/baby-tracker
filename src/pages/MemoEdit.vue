@@ -33,7 +33,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../utils/api'
-import { pickImages } from '../utils/image'
+import { pickImages, MEMO_IMG } from '../utils/image'
 import { showToast, showConfirm, showLoading, hideLoading } from '../utils/ui'
 import TabBar from '../components/TabBar.vue'
 
@@ -48,7 +48,9 @@ onMounted(async () => {
   if (isNew.value) return
   showLoading()
   try {
-    const m = await api.get(`/api/memo/${route.params.id}?raw=1`)
+    // 拿地址而不是 base64：旧图在保存时原样回传地址，服务端按索引取回原图，
+    // 这样「新增一张图」的请求体只有新图那么大，不会把几 MB 全量重传。
+    const m = await api.get(`/api/memo/${route.params.id}`)
     form.title = m.title
     form.content = m.content
     form.images = m.images || []
@@ -63,8 +65,16 @@ onMounted(async () => {
 })
 
 async function pick() {
-  const imgs = await pickImages(true)
-  form.images.push(...imgs.slice(0, 9 - form.images.length))
+  // 串行压缩 9 张在低端机上要好几秒，期间主线程基本卡住，先给个遮罩
+  showLoading()
+  try {
+    const imgs = await pickImages(true, MEMO_IMG)
+    form.images.push(...imgs.slice(0, 9 - form.images.length))
+  } catch (e) {
+    showToast('图片处理失败，请换一张试试')
+  } finally {
+    hideLoading()
+  }
 }
 
 async function save() {
@@ -74,7 +84,12 @@ async function save() {
     if (isNew.value) {
       await api.post('/api/memos', { title: form.title, content: form.content, images: form.images })
     } else {
-      await api.post(`/api/memo/${route.params.id}`, { title: form.title, content: form.content, images: form.images })
+      // 编辑是整行覆盖，重试一次不会产生副作用；新建是 INSERT，绝不能重试
+      await api.post(
+        `/api/memo/${route.params.id}`,
+        { title: form.title, content: form.content, images: form.images },
+        { retry: true }
+      )
     }
     showToast('已保存')
     router.back()
